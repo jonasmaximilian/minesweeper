@@ -7,7 +7,10 @@ module Lib
         insertMines,
         gameWon,
         gameLost,
-        uncover
+        uncover2,
+        uncover,
+        neighbours,
+        neighbourMines
     ) where
 
 import System.Random
@@ -66,6 +69,12 @@ uncover x y (Board rows) = if rows !! y !! x == HiddenMine
     then Board $ updateAt y (updateAt x Mine (rows !! y)) rows
     -- else count the number of mines and hiddenMines around the cell
     else Board $ updateAt y (updateAt x (Revealed $ neighbourMines x y (Board rows)) (rows !! y)) rows
+
+uncover2 :: Int -> Int -> Board -> Cell
+uncover2 x y (Board rows) = if rows !! y !! x == HiddenMine
+    then Mine
+    -- else count the number of mines and hiddenMines around the cell
+    else Revealed $ neighbourMines x y (Board rows)
     
 
 -- debugging 
