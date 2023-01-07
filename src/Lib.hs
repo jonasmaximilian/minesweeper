@@ -1,90 +1,143 @@
 module Lib
     ( 
-        Cell(..),
-        Board(..),
-        initBoard,
-        printBoard,
-        insertMines,
-        gameWon,
-        gameLost,
-        uncover2,
-        uncover,
-        neighbours,
-        neighbourMines
+        initialize,
+        play, 
+        runMinesweeper,
+        prettyPrint
     ) where
 
 import System.Random
+import Control.Monad.State
+import Data.List (concat)
 
-data Cell = HiddenMine | HiddenInt | Revealed Int | Mine deriving (Show, Eq)
+type MinesweeperState = (Board, Int)
 
-newtype Board = Board [[Cell]] deriving (Show, Eq)
+type Board = [[Cell]]
 
-initBoard :: Int -> Int -> Board 
-initBoard height width = Board $ replicate height $ replicate width (HiddenInt)
+data Cell = Mine | Number Int | Empty deriving (Show, Eq)
 
--- helper function to update a list at a given index (Data,List.Lens ???)
-updateAt :: Int -> a -> [a] -> [a]
-updateAt 0 x (_:xs) = x:xs
-updateAt n x (y:ys) = y:updateAt (n-1) x ys
-updateAt _ _ [] = []
+type Minesweeper a = State MinesweeperState a
 
-insertMines :: Int -> Board -> IO Board
-insertMines 0 board = return board
-insertMines n (Board rows) = do
-    x <- randomRIO (0, length rows - 1)
-    y <- randomRIO (0, length (rows !! x) - 1)
-    putStrLn $ "Inserting mine at " ++ show x ++ ", " ++ show y
-    --check if mine already exists
-    if rows !! x !! y == HiddenMine
-      then insertMines n (Board rows)
-      else insertMines (n-1) $ Board $ updateAt x (updateAt y HiddenMine (rows !! x)) rows
+initialize :: Int -> Int -> Minesweeper ()
+initialize numMines seed = do
+    let board = replicate height $ replicate width Empty
+    let (mines, _) = randomPlacement numMines seed board
+    let mines' = setCellValues mines
+    let numValues = size - numMines
+    put (mines', numValues)
 
+height :: Int
+height = 5
 
--- no elements of the board are HiddenInt
-gameWon :: Board -> Bool 
-gameWon (Board rows) = not $ any (any (== HiddenInt)) rows
+width :: Int
+width = 5
 
--- TODO
-gameLost :: Board -> Bool
-gameLost (Board rows) = any (any (== Mine)) rows
-
--- get a List of all the neighbours of a cell
-neighbours :: Int -> Int -> Board -> [Cell]
-neighbours x y (Board rows) = do
-    let height = length rows
-    let width = length (rows !! 0)
-    let x' = [x-1, x, x+1]
-    let y' = [y-1, y, y+1]
-    [rows !! i !! j | i <- y', i >= 0, j <- x', j >= 0, i < height, j < width]
-
--- check how many hiddenMines are in the neighbours of a cell 
--- don't have to check for mines because if they are already revealed the game is over
-neighbourMines :: Int -> Int -> Board -> Int 
-neighbourMines x y board = length $ filter (== HiddenMine) $ neighbours x y board
+size :: Int
+size = width * height
 
 
--- uncover a cell permanently on the board
-uncover :: Int -> Int -> Board -> Board
-uncover x y (Board rows) = if rows !! y !! x == HiddenMine
-    then Board $ updateAt y (updateAt x Mine (rows !! y)) rows
-    -- else count the number of mines and hiddenMines around the cell
-    else Board $ updateAt y (updateAt x (Revealed $ neighbourMines x y (Board rows)) (rows !! y)) rows
+randomPlacement :: Int -> Int -> Board -> (Board, StdGen)
+randomPlacement 0 seed board = (board, mkStdGen seed)
+randomPlacement n seed board =
+  let gen = mkStdGen seed
+      (x, gen') = randomR (0, height - 1) gen
+      (y, gen'') = randomR (0, width - 1) gen'
+  in if board !! x !! y == Mine
+     then randomPlacement n seed board
+     else let board' = setAt x y Mine board
+          in randomPlacement (n - 1) (seed + 1) board'
 
-uncover2 :: Int -> Int -> Board -> Cell
-uncover2 x y (Board rows) = if rows !! y !! x == HiddenMine
-    then Mine
-    -- else count the number of mines and hiddenMines around the cell
-    else Revealed $ neighbourMines x y (Board rows)
+-- Set the values of the whole board based on the number of mines in the surrounding cells.
+setCellValues :: Board -> Board
+setCellValues board =
+  let setCell x y cell =
+        case cell of
+          Mine -> Mine
+          -- if surrounding cells aren't mines, leave it empty
+            
+          _ -> Number $ countMinesAt x y board
+      setRow x row =
+        zipWith (setCell x) [0..] row
+      board' = zipWith setRow [0..] board
+  in board'
+
+countMinesAt :: Int -> Int -> Board -> Int
+countMinesAt x y board =
+  length $ filter (== Mine) $ concat $ map (\(x', y') -> [board !! x' !! y']) (neighbors x y)
+
+-- Get the indices of the surrounding cells.
+neighbors :: Int -> Int -> [(Int, Int)]
+neighbors x y =
+  [(x', y') | x' <- [x-1..x+1], y' <- [y-1..y+1], x' >= 0, y' >= 0, x' < height, y' < width, (x', y') /= (x, y)]
+
+
+
+
+-- Set the value at a given position on the board.
+setAt :: Int -> Int -> Cell -> Board -> Board
+setAt x y value board =
+  let row = board !! x
+      row' = take y row ++ [value] ++ drop (y + 1) row
+  in take x board ++ [row'] ++ drop (x + 1) board
+
+-- Reveal a cell on the board, potentially ending the game if it is a mine.
+reveal :: Int -> Int -> Minesweeper ()
+reveal x y = do
+  (board, numValues) <- get
+  case board !! x !! y of
+    Mine -> put (board, 0)
+    _ -> do let board' = revealCell x y board
+            let numValues' = numValues - 1
+            put (board', numValues')
+
+-- Reveal a cell and its surrounding cells if it is empty.
+revealCell :: Int -> Int -> Board -> Board
+revealCell x y board =
+  let cell = board !! x !! y
+  in case cell of
+    Mine -> board
+    Empty ->
+      let board' = setAt x y (Number $ countMines board) board
+      -- if countMines board == 0, reveal surrounding cells
+        in if countMines board == 0
+             then foldl (\board (x', y') -> revealCell x' y' board) board' (neighbors x y)
+             else board'
+    Number _ -> board
     
+    
+-- Count the number of mines in the surrounding cells.
+countMines :: Board -> Int
+countMines board =
+  let cells = concat board
+  in length $ filter (== Mine) cells
 
--- debugging 
-printBoard :: Board -> IO ()
-printBoard (Board rows) = do
-    mapM_ print rows
+-- end the game if there are no Number cells left
+endGame :: Minesweeper ()
+endGame = do
+  (board, mines) <- get
+  let cells = concat board
+  if length (filter (== Number 0) cells) == 0
+  then put (board, 0)
+  else when (mines == 0) $ put (board, 0)
 
+-- Play the game by revealing a cell.
+play :: Int -> Int -> Minesweeper ()
+play x y = do
+  reveal x y
+  endGame
 
--- TODOS:
--- 1. add a flag to a cell ?? isnt this just cosmetic?
--- 2. test the gameWon and gameLost functions
--- 3. add a simple UI using threepenny-gui
+runMinesweeper :: Minesweeper a -> MinesweeperState -> (a, MinesweeperState)
+runMinesweeper = runState
 
+-- debug
+prettyPrint :: MinesweeperState -> IO ()
+prettyPrint (board, _) = do
+    let printCell cell =
+            case cell of
+            Mine -> putStr "X "
+            Number n -> putStr $ show n ++ " "
+            Empty -> putStr "  "
+        printRow row = do
+             forM_ row printCell
+             putStrLn ""
+    forM_ board printRow
