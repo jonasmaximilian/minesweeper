@@ -1,5 +1,8 @@
 module Lib
     ( 
+        Cell(..),
+        height, 
+        width,
         initialize,
         play, 
         runMinesweeper,

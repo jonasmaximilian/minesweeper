@@ -37,6 +37,9 @@ library
       , threepenny-gui
       , containers
       , mtl
+      , transformers
+      , array
+      , base
   default-language: Haskell2010
 
 executable minesweeper-exe
