@@ -13,21 +13,26 @@ import System.Random
 import Control.Monad.State
 import Data.List (concat)
 
+--TODO
+-- 1. change Cell type to Mine| Revealed Int | Hidden 
+-- 1.1  find the value of the revealed number in the reveal function
+--2 make Lib file more pure #
+-- change state to board, numRevealed
+--3. make State wwork!!!
+
 type MinesweeperState = (Board, Int)
 
 type Board = [[Cell]]
 
-data Cell = Mine | Number Int | Empty deriving (Show, Eq)
+data Cell = Mine | Revealed Int | Hidden deriving (Show, Eq)
 
 type Minesweeper a = State MinesweeperState a
 
 initialize :: Int -> Int -> Minesweeper ()
 initialize numMines seed = do
-    let board = replicate height $ replicate width Empty
+    let board = replicate height $ replicate width Hidden
     let (mines, _) = randomPlacement numMines seed board
-    let mines' = setCellValues mines
-    let numValues = size - numMines
-    put (mines', numValues)
+    put (mines, 0) -- 0 is the number of revealed cells
 
 height :: Int
 height = 5
@@ -49,20 +54,6 @@ randomPlacement n seed board =
      then randomPlacement n seed board
      else let board' = setAt x y Mine board
           in randomPlacement (n - 1) (seed + 1) board'
-
--- Set the values of the whole board based on the number of mines in the surrounding cells.
-setCellValues :: Board -> Board
-setCellValues board =
-  let setCell x y cell =
-        case cell of
-          Mine -> Mine
-          -- if surrounding cells aren't mines, leave it empty
-            
-          _ -> Number $ countMinesAt x y board
-      setRow x row =
-        zipWith (setCell x) [0..] row
-      board' = zipWith setRow [0..] board
-  in board'
 
 countMinesAt :: Int -> Int -> Board -> Int
 countMinesAt x y board =
@@ -88,24 +79,21 @@ reveal :: Int -> Int -> Minesweeper ()
 reveal x y = do
   (board, numValues) <- get
   case board !! x !! y of
-    Mine -> put (board, 0)
-    _ -> do let board' = revealCell x y board
-            let numValues' = numValues - 1
-            put (board', numValues')
+    Hidden -> do let board' = setAt x y (Revealed $ countMinesAt x y board) board
+                 let numValues' = numValues + 1
+                 put (board', numValues')
+    _ -> put (board, numValues)
 
 -- Reveal a cell and its surrounding cells if it is empty.
 revealCell :: Int -> Int -> Board -> Board
 revealCell x y board =
   let cell = board !! x !! y
   in case cell of
-    Mine -> board
-    Empty ->
-      let board' = setAt x y (Number $ countMines board) board
-      -- if countMines board == 0, reveal surrounding cells
-        in if countMines board == 0
-             then foldl (\board (x', y') -> revealCell x' y' board) board' (neighbors x y)
-             else board'
-    Number _ -> board
+    Hidden -> let board' = setAt x y (Revealed $ countMinesAt x y board) board
+              in if countMinesAt x y board == 0
+                 then foldl (\board'' (x', y') -> revealCell x' y' board'') board' (neighbors x y)
+                 else board'
+    _ -> board
     
     
 -- Count the number of mines in the surrounding cells.
@@ -119,7 +107,7 @@ endGame :: Minesweeper ()
 endGame = do
   (board, mines) <- get
   let cells = concat board
-  if length (filter (== Number 0) cells) == 0
+  if length (filter (== Hidden) cells) == 0
   then put (board, 0)
   else when (mines == 0) $ put (board, 0)
 
@@ -138,8 +126,8 @@ prettyPrint (board, _) = do
     let printCell cell =
             case cell of
             Mine -> putStr "X "
-            Number n -> putStr $ show n ++ " "
-            Empty -> putStr "  "
+            Revealed n -> putStr $ show n ++ " "
+            Hidden -> putStr "H "
         printRow row = do
              forM_ row printCell
              putStrLn ""

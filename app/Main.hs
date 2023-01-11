@@ -10,7 +10,27 @@ import System.Random
 import Data.IORef
 
 
+setAt :: Int -> Int -> a -> [[a]] -> [[a]]
+setAt x y val array = 
+    let (before, row:after) = splitAt x array
+        row' = setAtRow y val row
+    in before ++ row':after
 
+setAtRow :: Int -> a -> [a] -> [a]
+setAtRow n val row = let (before, _:after) = splitAt n row
+                    in before ++ val:after
+
+printClickedBoard :: [[Bool]] -> IO ()
+printClickedBoard board = do
+    forM_ [0..height-1] $ \x -> do
+        forM_ [0..width-1] $ \y -> do
+            let cellValue = board !! x !! y
+            case cellValue of
+                True -> do
+                    putStr "X"
+                False -> do
+                    putStr "."
+        putStrLn ""
 
 main :: IO ()
 main = startGUI defaultConfig setup
@@ -18,9 +38,11 @@ main = startGUI defaultConfig setup
 setup :: Window -> UI ()
 setup window = do
     return window # set title "Minesweeper"
-
+    clickedBoard <- liftIO $ newIORef (replicate height $ replicate width False)
     -- start game with 5 mines 5x5 board (height and width are defined in Lib.hs)
-    let (result, finalState) = runMinesweeper (initialize 5 0) (undefined, undefined)
+    let mines = 5
+    seed <- liftIO $ randomIO :: UI Int
+    let (result, finalState) = runMinesweeper (initialize mines seed) (undefined, undefined)
     liftIO $ prettyPrint finalState
 
     -- GUI
@@ -50,32 +72,29 @@ setup window = do
                             -- end game
                             liftIO $ threadDelay 1000000
                             liftIO $ exitSuccess
-                        Number n -> do
+                        Revealed n -> do
                             element cell # set UI.text (show n)
                             element cell # UI.set UI.style [("background-color", "green")]
+                            -- update clickedBoard
+                            -- read
+                            clickedBoard' <- liftIO $ readIORef clickedBoard
+                            clickedBoard'' <- liftIO $ atomicModifyIORef clickedBoard (\clickedBoard' -> (setAt x y True clickedBoard', clickedBoard'))
+                            clickedBoard <- return clickedBoard''
+                            liftIO $ print (length (filter (== False) (concat clickedBoard)))
+                            if length (filter (== False) (concat clickedBoard)) == (mines + 1) then do
+                                div <- UI.div # set UI.text "You win!"
+                                getBody window #+ [element div]
+                                liftIO $ threadDelay 1000000
+                                div <- UI.div # set UI.text "Refresh to play again"
+                                getBody window #+ [element div]
+                                return ()
+                                
+                            else do
+                                return ()
+                            liftIO $ printClickedBoard clickedBoard
+                            return ()
                         
 
 
         getBody window #+ [element rowElement]
         getBody window #+ [element board]
-
-        
-    makeMoveBtn <- UI.button # set UI.text "Make Move"
-    getBody window #+ [element makeMoveBtn]
-
-    on UI.click makeMoveBtn $ \_ -> do
-        liftIO $ putStrLn "Make Move"
-        gen <- liftIO $ newStdGen
-        let (x, _) = randomR (0, height - 1) gen
-        let (y, _) = randomR (0, width - 1) gen
-        liftIO $ putStrLn $ "x: " ++ show x ++ " y: " ++ show y
-        let (result, newFinalState) = runMinesweeper (play x y) finalState
-        let (board, numMines) = newFinalState
-        let finalState = newFinalState
-        -- get cell by id and set background color to yellow
-        cell <- getBody window # UI.find (UI.byId (show x ++ show y))
-        element cell # UI.set UI.style [("background-color", "yellow")]
-
-
-
-
