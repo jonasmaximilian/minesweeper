@@ -26,35 +26,14 @@ import Control.Monad
 
 -- try to implement the suggest move logic (when theres a 0 val choose any square) maybe also for 1s
 -- refactor code:
---      -- get rid of Hidden and Flagged in Cell data type
---      -- 
 -- write Documentation
 
 
+-- curr log:
+-- changed clickedBoard to liveBoard
+-- remove setVal, setValRow and printLiveBoard from Main
+-- remove Flagged from Cell data type
 
-
-setAt :: Int -> Int -> a -> [[a]] -> [[a]]
-setAt x y val array = 
-    let (before, row:after) = splitAt x array
-        row' = setAtRow y val row
-    in before ++ row':after
-
-setAtRow :: Int -> a -> [a] -> [a]
-setAtRow n val row = let (before, _:after) = splitAt n row
-                    in before ++ val:after
-
-
-printClickedBoard :: [[Int]] -> IO ()
-printClickedBoard board = do
-    forM_ [0..height-1] $ \x -> do
-        forM_ [0..width-1] $ \y -> do
-            let cellValue = board !! x !! y
-            case cellValue of
-                (-1) -> do
-                    putStr "."
-                n -> do
-                    putStr $ show n
-        putStrLn ""
 
 main :: IO ()
 main = startGUI defaultConfig setup
@@ -63,9 +42,9 @@ setup :: Window -> UI ()
 setup window = do
     return window # set title "Minesweeper"
 
-     -- initialize clickedBoard
-    clickedBoard <- liftIO $ newIORef (replicate height $ replicate width (-1))
-    liftIO $ printClickedBoard =<< readIORef clickedBoard
+     -- initialize liveBoard
+    liveBoard <- liftIO $ newIORef (replicate height $ replicate width (-1))
+    liftIO $ printLiveBoard =<< readIORef liveBoard
 
     -- start game with 5 mines 5x5 board (height and width are defined in Lib.hs)
     let mines = 5
@@ -111,6 +90,8 @@ setup window = do
                             let cellValue = board !! x !! y
                             case cellValue of
                                 Mine -> do -- place mine 💣
+
+
                                     element cell # set UI.text "X"
                                     element cell # UI.set UI.style [("background-color", "red")]
                                     -- end game
@@ -122,17 +103,17 @@ setup window = do
                                     element cell # UI.set UI.style [("background-color", "green")]
                                     -- update clickedBoard
                                     -- read
-                                    clickedBoard' <- liftIO $ readIORef clickedBoard
-                                    clickedBoard'' <- liftIO $ return $ setAt x y n clickedBoard'
+                                    liveBoard' <- liftIO $ readIORef liveBoard
+                                    liveBoard'' <- liftIO $ return $ setVal x y n liveBoard'
                                     -- write
-                                    liftIO $ writeIORef clickedBoard clickedBoard''
+                                    liftIO $ writeIORef liveBoard liveBoard''
 
-                                    clickedBoard <- liftIO $ readIORef clickedBoard
-                                    liftIO $ print (length (filter (<0) (concat clickedBoard)))
-                                    liftIO $ printClickedBoard clickedBoard
+                                    liveBoard <- liftIO $ readIORef liveBoard
+                                    liftIO $ print (length (filter (<0) (concat liveBoard)))
+                                    liftIO $ printLiveBoard liveBoard
                                     return cell
                                     -- check if game is over
-                                    if (length (filter (<0) (concat clickedBoard))) == mines then do
+                                    if (length (filter (<0) (concat liveBoard))) == mines then do
                                         liftIO $ putStrLn "You win!"
                                         winMsg <- UI.p # set UI.text "You win!"
                                         getBody window #+ [element winMsg]

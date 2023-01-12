@@ -8,6 +8,8 @@ module Lib
         play, 
         runMinesweeper,
         toggleAction,
+        setVal,
+        printLiveBoard,
         prettyPrint
     ) where
 
@@ -19,7 +21,7 @@ type MinesweeperState = (Board, Int) -- Board and number of revealed cells
 
 type Board = [[Cell]] -- 2D array of cells
 
-data Cell = Mine | Revealed Int | Hidden | Flagged deriving (Show, Eq) -- Revealed Int is the number of mines around the cell
+data Cell = Mine | Revealed Int | Hidden deriving (Show, Eq) -- Revealed Int is the number of mines around the cell
 
 data Action = Reveal | Flag deriving (Show, Eq)
 
@@ -111,14 +113,38 @@ toggleAction action =
 runMinesweeper :: Minesweeper a -> MinesweeperState -> (a, MinesweeperState)
 runMinesweeper = runState
 
+
+-- set a value on a 2D array
+setVal :: Int -> Int -> a -> [[a]] -> [[a]]
+setVal x y val array = 
+    let (before, row:after) = splitAt x array
+        row' = setValRow y val row
+    in before ++ row':after
+
+setValRow :: Int -> a -> [a] -> [a]
+setValRow n val row = let (before, _:after) = splitAt n row
+                    in before ++ val:after
+
+-- debug
+printLiveBoard :: [[Int]] -> IO ()
+printLiveBoard board = do
+    forM_ [0..height-1] $ \x -> do
+        forM_ [0..width-1] $ \y -> do
+            let cellValue = board !! x !! y
+            case cellValue of
+                (-1) -> do
+                    putStr "."
+                n -> do
+                    putStr $ show n
+        putStrLn ""
+
 -- debug
 prettyPrint :: MinesweeperState -> IO ()
 prettyPrint (board, _) = do
     let printCell cell =
             case cell of
             Mine -> putStr "X "
-            Revealed n -> putStr $ show n ++ " "
-            Hidden -> putStr "H "
+            _ -> putStr ". "
         printRow row = do
              forM_ row printCell
              putStrLn ""
