@@ -1,11 +1,13 @@
 module Lib
     ( 
         Cell(..),
+        Action(..),
         height, 
         width,
         initialize,
         play, 
         runMinesweeper,
+        toggleAction,
         prettyPrint
     ) where
 
@@ -13,22 +15,17 @@ import System.Random
 import Control.Monad.State
 import Data.List (concat)
 
---TODO
--- 1. change Cell type to Mine| Revealed Int | Hidden 
--- 1.1  find the value of the revealed number in the reveal function
---2 make Lib file more pure #
--- change state to board, numRevealed
---3. make State wwork!!!
+type MinesweeperState = (Board, Int) -- Board and number of revealed cells
 
-type MinesweeperState = (Board, Int)
+type Board = [[Cell]] -- 2D array of cells
 
-type Board = [[Cell]]
+data Cell = Mine | Revealed Int | Hidden | Flagged deriving (Show, Eq) -- Revealed Int is the number of mines around the cell
 
-data Cell = Mine | Revealed Int | Hidden deriving (Show, Eq)
+data Action = Reveal | Flag deriving (Show, Eq)
 
-type Minesweeper a = State MinesweeperState a
+type Minesweeper a = State MinesweeperState a -- State monad
 
-initialize :: Int -> Int -> Minesweeper ()
+initialize :: Int -> Int -> Minesweeper () -- Initialize the board with mines
 initialize numMines seed = do
     let board = replicate height $ replicate width Hidden
     let (mines, _) = randomPlacement numMines seed board
@@ -42,7 +39,6 @@ width = 5
 
 size :: Int
 size = width * height
-
 
 randomPlacement :: Int -> Int -> Board -> (Board, StdGen)
 randomPlacement 0 seed board = (board, mkStdGen seed)
@@ -77,12 +73,12 @@ setAt x y value board =
 -- Reveal a cell on the board, potentially ending the game if it is a mine.
 reveal :: Int -> Int -> Minesweeper ()
 reveal x y = do
-  (board, numValues) <- get
+  (board, numRevealedCells) <- get
   case board !! x !! y of
     Hidden -> do let board' = setAt x y (Revealed $ countMinesAt x y board) board
-                 let numValues' = numValues + 1
-                 put (board', numValues')
-    _ -> put (board, numValues)
+                 let numRevealedCells' = numRevealedCells + 1
+                 put (board', numRevealedCells')
+    _ -> put (board, numRevealedCells)
 
 -- Reveal a cell and its surrounding cells if it is empty.
 revealCell :: Int -> Int -> Board -> Board
@@ -102,21 +98,18 @@ countMines board =
   let cells = concat board
   in length $ filter (== Mine) cells
 
--- end the game if there are no Number cells left
-endGame :: Minesweeper ()
-endGame = do
-  (board, mines) <- get
-  let cells = concat board
-  if length (filter (== Hidden) cells) == 0
-  then put (board, 0)
-  else when (mines == 0) $ put (board, 0)
-
 -- Play the game by revealing a cell.
-play :: Int -> Int -> Minesweeper ()
+play :: Int -> Int  -> Minesweeper ()
 play x y = do
   reveal x y
-  endGame
 
+toggleAction :: Action -> Action
+toggleAction action =
+  case action of
+    Reveal -> Flag
+    Flag -> Reveal
+
+-- runMinesweeper is a helper function to run the Minesweeper monad
 runMinesweeper :: Minesweeper a -> MinesweeperState -> (a, MinesweeperState)
 runMinesweeper = runState
 

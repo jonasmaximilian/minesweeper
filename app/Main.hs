@@ -8,6 +8,19 @@ import System.Exit (exitSuccess)
 import Control.Concurrent (threadDelay)
 import System.Random
 import Data.IORef
+import Control.Monad 
+
+-- TODO till sleep (at least) lets go 90 15
+-- 11:30 work -> 12 pm break
+-- 12 pm -> 1:30 pm work -> 2 pm break
+-- 2 pm -> 3:30 pm work -> 4 pm bed?
+-- safe current state on github
+-- change clickedBoard to Ints (rewrite)
+-- try to implement the suggest move logic (when theres a 0 val choose any square) maybe also for 1s
+-- refactor code / try to fix clickedBoard order (rewrite)
+-- write Documentation
+-- fix bug that sometimes gmaboard doesnt load? some infinite loop problem maybe seed
+
 
 
 setAt :: Int -> Int -> a -> [[a]] -> [[a]]
@@ -19,6 +32,7 @@ setAt x y val array =
 setAtRow :: Int -> a -> [a] -> [a]
 setAtRow n val row = let (before, _:after) = splitAt n row
                     in before ++ val:after
+
 
 printClickedBoard :: [[Bool]] -> IO ()
 printClickedBoard board = do
@@ -38,12 +52,19 @@ main = startGUI defaultConfig setup
 setup :: Window -> UI ()
 setup window = do
     return window # set title "Minesweeper"
+
+     -- initialize clickedBoard
     clickedBoard <- liftIO $ newIORef (replicate height $ replicate width False)
+    liftIO $ printClickedBoard (replicate height $ replicate width False)
+
     -- start game with 5 mines 5x5 board (height and width are defined in Lib.hs)
     let mines = 5
     seed <- liftIO $ randomIO :: UI Int
     let (result, finalState) = runMinesweeper (initialize mines seed) (undefined, undefined)
     liftIO $ prettyPrint finalState
+
+    -- set the play action to Reveal
+    currAction <- liftIO $ newIORef Reveal
 
     -- GUI
     board <- UI.table
@@ -60,41 +81,81 @@ setup window = do
                 
                 -- add event handler and game logic
                 on UI.click cell $ \_ -> do
-                    let (result, newFinalState) = runMinesweeper (play x y) finalState
-                    let (board, numMines) = newFinalState
-                    let finalState = newFinalState
-                    liftIO $ prettyPrint finalState
-                    let cellValue = board !! x !! y
-                    case cellValue of
-                        Mine -> do
-                            element cell # set UI.text "X"
-                            element cell # UI.set UI.style [("background-color", "red")]
-                            -- end game
-                            liftIO $ threadDelay 1000000
-                            liftIO $ exitSuccess
-                        Revealed n -> do
-                            element cell # set UI.text (show n)
-                            element cell # UI.set UI.style [("background-color", "green")]
-                            -- update clickedBoard
-                            -- read
-                            clickedBoard' <- liftIO $ readIORef clickedBoard
-                            clickedBoard'' <- liftIO $ atomicModifyIORef clickedBoard (\clickedBoard' -> (setAt x y True clickedBoard', clickedBoard'))
-                            clickedBoard <- return clickedBoard''
-                            liftIO $ print (length (filter (== False) (concat clickedBoard)))
-                            if length (filter (== False) (concat clickedBoard)) == (mines + 1) then do
-                                div <- UI.div # set UI.text "You win!"
-                                getBody window #+ [element div]
-                                liftIO $ threadDelay 1000000
-                                div <- UI.div # set UI.text "Refresh to play again"
-                                getBody window #+ [element div]
-                                return ()
-                                
-                            else do
-                                return ()
-                            liftIO $ printClickedBoard clickedBoard
-                            return ()
-                        
+                    -- get action type
+                    action <- liftIO $ readIORef currAction
+                    liftIO $ print action
 
-
+                    -- check if action is Reveal or Flag 🚩
+                    case action of
+                        Flag -> do
+                            element cell # set UI.text "🚩"
+                        Reveal -> do
+                            -- play the cell
+                            let (result, newFinalState) = runMinesweeper (play x y) finalState
+                            let (board, numMines) = newFinalState
+                            let finalState = newFinalState
+                            liftIO $ prettyPrint finalState
+                            let cellValue = board !! x !! y
+                            case cellValue of
+                                Mine -> do -- place mine 💣
+                                    element cell # set UI.text "X"
+                                    element cell # UI.set UI.style [("background-color", "red")]
+                                    -- end game
+                                    liftIO $ threadDelay 1000000
+                                    liftIO $ exitSuccess
+                                Revealed n -> do
+                                    
+                                    element cell # set UI.text (show n)
+                                    element cell # UI.set UI.style [("background-color", "green")]
+                                    -- update clickedBoard
+                                    -- read
+                                    clickedBoard' <- liftIO $ readIORef clickedBoard
+                                    clickedBoard'' <- liftIO $ atomicModifyIORef clickedBoard (\clickedBoard' -> (setAt x y True clickedBoard', clickedBoard'))
+                                    clickedBoard <- return clickedBoard''
+                                    liftIO $ print (length (filter (== False) (concat clickedBoard)))
+                                    return cell
+                                    -- check if game is over
+                                    if (length (filter (== False) (concat clickedBoard))) == (mines + 1) then do
+                                        liftIO $ putStrLn "You win!"
+                                        winMsg <- UI.p # set UI.text "You win!"
+                                        getBody window #+ [element winMsg]
+                                        refreshBtn <- UI.button # set UI.text "Refresh"
+                                        getBody window #+ [element refreshBtn]
+                                        on UI.click refreshBtn $ \_ -> do
+                                            liftIO $ exitSuccess
+                                        return cell
+                                    else do
+                                        return cell
+   
         getBody window #+ [element rowElement]
         getBody window #+ [element board]
+
+    -- Suggest move button and logic
+    randomMoveBtn <- UI.button # set UI.text "Suggest Move"
+    getBody window #+ [element randomMoveBtn]
+    on UI.click randomMoveBtn $ \_ -> do
+        x <- liftIO $ randomRIO (0, height-1)
+        y <- liftIO $ randomRIO (0, width-1)
+        cell <- getElementById window (show x ++ show y)
+        case cell of
+            Just cell -> do
+                 element cell # set UI.style [("background-color", "yellow")]
+            Nothing -> do
+                error "Error in bot move"
+        return ()
+
+    -- toggleFlag button and logic
+    toggleFlagOn <- UI.button # set UI.text "Flag is off"
+    getBody window #+ [element toggleFlagOn]
+    on UI.click toggleFlagOn $ \_ -> do
+        liftIO $ atomicModifyIORef currAction (\action -> (toggleAction action, action))
+        action <- liftIO $ readIORef currAction
+        liftIO $ print action
+        case action of
+            Flag -> do
+                element toggleFlagOn # set UI.text "Flag is on"
+            Reveal -> do
+                element toggleFlagOn # set UI.text "Flag is off"
+        return () 
+
+    return ()
