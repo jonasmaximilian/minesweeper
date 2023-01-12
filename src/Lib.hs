@@ -9,6 +9,7 @@ module Lib
         runMinesweeper,
         toggleAction,
         setVal,
+        findSafeMove,
         printLiveBoard,
         prettyPrint
     ) where
@@ -124,6 +125,28 @@ setVal x y val array =
 setValRow :: Int -> a -> [a] -> [a]
 setValRow n val row = let (before, _:after) = splitAt n row
                     in before ++ val:after
+
+findSafeMove :: [[Int]] -> IO (Int, Int)
+findSafeMove board = do
+    let height = length board
+    let width = length (head board)
+    -- find a 0 value and return any value around it that isnt revealed yet -> -1
+    -- if there are no 0 values, return any value that isnt revealed yet -> -1
+    let findSafeMove' :: Int -> Int -> IO (Int, Int)
+        findSafeMove' x y =
+            case board !! x !! y of
+                0 -> do
+                    let neighbors = [(x-1, y-1), (x-1, y), (x-1, y+1), (x, y-1), (x, y+1), (x+1, y-1), (x+1, y), (x+1, y+1)]
+                    let safeNeighbors = filter (\(x, y) -> x >= 0 && x < height && y >= 0 && y < width) neighbors
+                    let safeNeighbors' = filter (\(x, y) -> board !! x !! y == -1) safeNeighbors
+                    if safeNeighbors' == [] then
+                        findSafeMove' x (y+1)
+                    else do
+                        let (x', y') = head safeNeighbors'
+                        return (x', y')
+                _ -> findSafeMove' x (y+1)
+    findSafeMove' 0 0
+           
 
 -- debug
 printLiveBoard :: [[Int]] -> IO ()

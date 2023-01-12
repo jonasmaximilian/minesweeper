@@ -30,9 +30,7 @@ import Control.Monad
 
 
 -- curr log:
--- changed clickedBoard to liveBoard
--- remove setVal, setValRow and printLiveBoard from Main
--- remove Flagged from Cell data type
+-- get game bot working, so we dont get a random move
 
 
 main :: IO ()
@@ -132,8 +130,9 @@ setup window = do
     randomMoveBtn <- UI.button # set UI.text "Suggest Move"
     getBody window #+ [element randomMoveBtn]
     on UI.click randomMoveBtn $ \_ -> do
-        x <- liftIO $ randomRIO (0, height-1)
-        y <- liftIO $ randomRIO (0, width-1)
+        liveBoard' <- liftIO $ readIORef liveBoard
+        (x, y) <- liftIO $ findSafeMove liveBoard'
+        liftIO $ print (x, y)
         cell <- getElementById window (show x ++ show y)
         case cell of
             Just cell -> do
@@ -157,3 +156,5 @@ setup window = do
         return () 
 
     return ()
+
+
