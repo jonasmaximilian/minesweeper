@@ -47,9 +47,9 @@ randomPlacement n seed board =
       (x, gen') = randomR (0, height - 1) gen
       (y, gen'') = randomR (0, width - 1) gen'
   in if board !! x !! y == Mine
-     then randomPlacement n seed board
+     then randomPlacement n (seed + 1) board
      else let board' = setAt x y Mine board
-          in randomPlacement (n - 1) (seed + 1) board'
+          in randomPlacement (n - 1) (seed) board'
 
 countMinesAt :: Int -> Int -> Board -> Int
 countMinesAt x y board =
@@ -59,8 +59,6 @@ countMinesAt x y board =
 neighbors :: Int -> Int -> [(Int, Int)]
 neighbors x y =
   [(x', y') | x' <- [x-1..x+1], y' <- [y-1..y+1], x' >= 0, y' >= 0, x' < height, y' < width, (x', y') /= (x, y)]
-
-
 
 
 -- Set the value at a given position on the board.

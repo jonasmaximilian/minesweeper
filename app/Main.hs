@@ -11,15 +11,25 @@ import Data.IORef
 import Control.Monad 
 
 -- TODO till sleep (at least) lets go 90 15
+
+
 -- 11:30 work -> 12 pm break
 -- 12 pm -> 1:30 pm work -> 2 pm break
 -- 2 pm -> 3:30 pm work -> 4 pm bed?
--- safe current state on github
--- change clickedBoard to Ints (rewrite)
+
+-- safe current state on github  --------- DONE
+-- change clickedBoard to Ints (rewrite) -- DONE
+-- try to fix clickedBoard order (rewrite) -- DONE
+-- fix bug that sometimes gmaboard doesnt load? some infinite loop problem maybe seed related --- DONE
+
+
+
 -- try to implement the suggest move logic (when theres a 0 val choose any square) maybe also for 1s
--- refactor code / try to fix clickedBoard order (rewrite)
+-- refactor code:
+--      -- get rid of Hidden and Flagged in Cell data type
+--      -- 
 -- write Documentation
--- fix bug that sometimes gmaboard doesnt load? some infinite loop problem maybe seed
+
 
 
 
@@ -34,16 +44,16 @@ setAtRow n val row = let (before, _:after) = splitAt n row
                     in before ++ val:after
 
 
-printClickedBoard :: [[Bool]] -> IO ()
+printClickedBoard :: [[Int]] -> IO ()
 printClickedBoard board = do
     forM_ [0..height-1] $ \x -> do
         forM_ [0..width-1] $ \y -> do
             let cellValue = board !! x !! y
             case cellValue of
-                True -> do
-                    putStr "X"
-                False -> do
+                (-1) -> do
                     putStr "."
+                n -> do
+                    putStr $ show n
         putStrLn ""
 
 main :: IO ()
@@ -54,12 +64,15 @@ setup window = do
     return window # set title "Minesweeper"
 
      -- initialize clickedBoard
-    clickedBoard <- liftIO $ newIORef (replicate height $ replicate width False)
-    liftIO $ printClickedBoard (replicate height $ replicate width False)
+    clickedBoard <- liftIO $ newIORef (replicate height $ replicate width (-1))
+    liftIO $ printClickedBoard =<< readIORef clickedBoard
 
     -- start game with 5 mines 5x5 board (height and width are defined in Lib.hs)
     let mines = 5
+    liftIO $ print "generating seed..."
     seed <- liftIO $ randomIO :: UI Int
+    liftIO $ print seed
+
     let (result, finalState) = runMinesweeper (initialize mines seed) (undefined, undefined)
     liftIO $ prettyPrint finalState
 
@@ -110,12 +123,16 @@ setup window = do
                                     -- update clickedBoard
                                     -- read
                                     clickedBoard' <- liftIO $ readIORef clickedBoard
-                                    clickedBoard'' <- liftIO $ atomicModifyIORef clickedBoard (\clickedBoard' -> (setAt x y True clickedBoard', clickedBoard'))
-                                    clickedBoard <- return clickedBoard''
-                                    liftIO $ print (length (filter (== False) (concat clickedBoard)))
+                                    clickedBoard'' <- liftIO $ return $ setAt x y n clickedBoard'
+                                    -- write
+                                    liftIO $ writeIORef clickedBoard clickedBoard''
+
+                                    clickedBoard <- liftIO $ readIORef clickedBoard
+                                    liftIO $ print (length (filter (<0) (concat clickedBoard)))
+                                    liftIO $ printClickedBoard clickedBoard
                                     return cell
                                     -- check if game is over
-                                    if (length (filter (== False) (concat clickedBoard))) == (mines + 1) then do
+                                    if (length (filter (<0) (concat clickedBoard))) == mines then do
                                         liftIO $ putStrLn "You win!"
                                         winMsg <- UI.p # set UI.text "You win!"
                                         getBody window #+ [element winMsg]
