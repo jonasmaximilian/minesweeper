@@ -5,7 +5,7 @@ module Lib
         height, 
         width,
         initialize,
-        play, 
+        reveal,
         runMinesweeper,
         toggleAction,
         setVal,
@@ -18,15 +18,20 @@ import System.Random
 import Control.Monad.State
 import Data.List (concat)
 
-type MinesweeperState = (Board, Int) -- Board and number of revealed cells
+-- Board and number of revealed cells
+type MinesweeperState = (Board, Int) 
 
-type Board = [[Cell]] -- 2D array of cells
+-- 2D array of cells
+type Board = [[Cell]] 
 
-data Cell = Mine | Revealed Int | Hidden deriving (Show, Eq) -- Revealed Int is the number of mines around the cell
+-- Revealed Int is the number of mines around the cell
+data Cell = Mine | Revealed Int | Hidden deriving (Show, Eq) 
 
+-- action type to give the click context (flag or reveal)
 data Action = Reveal | Flag deriving (Show, Eq)
 
-type Minesweeper a = State MinesweeperState a -- State monad
+-- State monad for the game
+type Minesweeper a = State MinesweeperState a 
 
 initialize :: Int -> Int -> Minesweeper () -- Initialize the board with mines
 initialize numMines seed = do
@@ -43,17 +48,19 @@ width = 5
 size :: Int
 size = width * height
 
+-- seed is randomly generated in Main.hs
 randomPlacement :: Int -> Int -> Board -> (Board, StdGen)
 randomPlacement 0 seed board = (board, mkStdGen seed)
 randomPlacement n seed board =
   let gen = mkStdGen seed
       (x, gen') = randomR (0, height - 1) gen
       (y, gen'') = randomR (0, width - 1) gen'
-  in if board !! x !! y == Mine
+  in if board !! x !! y == Mine -- if there is already a mine at this position, try again with a different seed
      then randomPlacement n (seed + 1) board
      else let board' = setAt x y Mine board
           in randomPlacement (n - 1) (seed) board'
 
+-- count the number of mines around a given cell
 countMinesAt :: Int -> Int -> Board -> Int
 countMinesAt x y board =
   length $ filter (== Mine) $ concat $ map (\(x', y') -> [board !! x' !! y']) (neighbors x y)
@@ -99,11 +106,6 @@ countMines board =
   let cells = concat board
   in length $ filter (== Mine) cells
 
--- Play the game by revealing a cell.
-play :: Int -> Int  -> Minesweeper ()
-play x y = do
-  reveal x y
-
 toggleAction :: Action -> Action
 toggleAction action =
   case action of
@@ -139,7 +141,7 @@ findSafeMove board = do
                     let neighbors = [(x-1, y-1), (x-1, y), (x-1, y+1), (x, y-1), (x, y+1), (x+1, y-1), (x+1, y), (x+1, y+1)]
                     let safeNeighbors = filter (\(x, y) -> x >= 0 && x < height && y >= 0 && y < width) neighbors
                     let safeNeighbors' = filter (\(x, y) -> board !! x !! y == -1) safeNeighbors
-                    if safeNeighbors' == [] then
+                    if safeNeighbors' == [] then -- if the neighbors are all revealed, try the next cell
                         findSafeMove' x (y+1)
                     else do
                         let (x', y') = head safeNeighbors'
